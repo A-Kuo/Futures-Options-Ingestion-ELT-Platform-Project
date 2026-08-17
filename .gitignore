@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# dbt
+target/
+dbt_packages/
+logs/
+
+# Local warehouse
+data/*.duckdb
+data/*.duckdb.wal
+data/*.tmp
+
+# Streamlit / OS
+.streamlit/secrets.toml
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp

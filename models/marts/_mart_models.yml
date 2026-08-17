@@ -1,0 +1,204 @@
+version: 2
+
+models:
+  - name: dim_underlying
+    description: '{{ doc("dim_underlying") }}'
+    columns:
+      - name: underlying_sk
+        data_tests: [unique, not_null]
+      - name: underlying_code
+        data_tests: [unique, not_null]
+
+  - name: dim_exchange
+    description: One row per exchange that lists products in this warehouse.
+    columns:
+      - name: exchange_sk
+        data_tests: [unique, not_null]
+      - name: exchange_code
+        data_tests: [unique, not_null]
+
+  - name: dim_futures_contract
+    description: '{{ doc("dim_futures_contract") }}'
+    columns:
+      - name: futures_contract_sk
+        data_tests: [unique, not_null]
+      - name: contract_symbol
+        data_tests: [unique, not_null]
+      - name: underlying_code
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_underlying')
+                field: underlying_code
+
+  - name: dim_options_contract
+    description: '{{ doc("dim_options_contract") }}'
+    columns:
+      - name: options_contract_sk
+        data_tests: [unique, not_null]
+      - name: option_contract_nk
+        data_tests: [unique, not_null]
+      - name: call_put_flag
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['C', 'P']
+
+  - name: dim_expiry
+    description: One row per underlying, expiry date, and instrument family (futures vs options).
+    columns:
+      - name: expiry_sk
+        data_tests: [unique, not_null]
+
+  - name: dim_strike
+    description: Distinct listed strikes by underlying. Grain is underlying + strike.
+    columns:
+      - name: strike_sk
+        data_tests: [unique, not_null]
+
+  - name: dim_market_date
+    description: Distinct market/snapshot dates present in the warehouse.
+    columns:
+      - name: market_date
+        data_tests: [unique, not_null]
+
+  - name: fct_futures_prices
+    description: '{{ doc("fct_futures_prices") }}'
+    columns:
+      - name: futures_price_sk
+        data_tests: [unique, not_null]
+      - name: contract_symbol
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_futures_contract')
+                field: contract_symbol
+
+  - name: fct_futures_activity
+    description: '{{ doc("fct_futures_activity") }}'
+    columns:
+      - name: futures_activity_sk
+        data_tests: [unique, not_null]
+
+  - name: fct_options_chain_snapshots
+    description: '{{ doc("fct_options_chain_snapshots") }}'
+    columns:
+      - name: options_chain_sk
+        data_tests: [unique, not_null]
+      - name: option_contract_nk
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_options_contract')
+                field: option_contract_nk
+
+  - name: fct_options_activity
+    description: Activity slice of the options chain fact, same grain as the snapshot table.
+    columns:
+      - name: options_activity_sk
+        data_tests: [unique, not_null]
+
+  - name: fct_open_interest
+    description: Unified open interest across futures contracts and option series.
+    columns:
+      - name: open_interest_sk
+        data_tests: [unique, not_null]
+      - name: instrument_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['futures', 'options']
+
+  - name: mart_futures_nearby_roll
+    description: '{{ doc("mart_futures_nearby_roll") }}'
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [market_date, underlying_code]
+    columns:
+      - name: nearby_rank
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1]
+
+  - name: mart_futures_term_structure
+    description: Settlement curve for the first six live contracts on each market date.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [market_date, contract_symbol]
+
+  - name: mart_futures_volume_oi_trends
+    description: Front-three contract volume and open-interest trends, including unusual-activity flags.
+    columns:
+      - name: contract_symbol
+        data_tests: [not_null]
+
+  - name: mart_futures_expiry_calendar
+    description: Contract expiry calendar with the latest session's activity attached.
+    columns:
+      - name: contract_symbol
+        data_tests: [unique, not_null]
+
+  - name: mart_futures_contract_overview
+    description: Latest-session scorecard for every listed futures contract.
+    columns:
+      - name: contract_symbol
+        data_tests: [unique, not_null]
+
+  - name: mart_options_chain_activity
+    description: '{{ doc("mart_options_chain_activity") }}'
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [snapshot_date, option_contract_nk]
+
+  - name: mart_options_open_interest_by_strike
+    description: Call and put volume/open interest rolled up to strike for heatmap and concentration views.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [snapshot_date, underlying_code, expiry_date, strike]
+
+  - name: mart_options_expiry_summary
+    description: Options activity aggregated to the expiry date for each underlying and snapshot.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [snapshot_date, underlying_code, expiry_date]
+
+  - name: mart_put_call_summary
+    description: Daily put/call volume and open-interest ratios by underlying.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [snapshot_date, underlying_code]
+
+  - name: mart_options_spread_monitor
+    description: Bid/ask width by option series for quote-quality monitoring, not for execution research.
+    columns:
+      - name: option_contract_nk
+        data_tests: [not_null]
+
+  - name: mart_contract_activity_monitor
+    description: Cross-domain activity so futures and options volume can be compared around the same session.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [as_of_date, underlying_code]
+
+  - name: mart_pipeline_quality
+    description: Row counts and date coverage by layer, used by the pipeline quality dashboard.
+
+unit_tests:
+  - name: put_call_ratio_uses_volume_not_oi_for_volume_ratio
+    model: mart_put_call_summary
+    given:
+      - input: ref('fct_options_chain_snapshots')
+        rows:
+          - {snapshot_date: '2026-08-14', underlying_code: ES, call_put_flag: C, volume: 100, open_interest: 1000}
+          - {snapshot_date: '2026-08-14', underlying_code: ES, call_put_flag: P, volume: 150, open_interest: 800}
+    expect:
+      rows:
+        - {snapshot_date: '2026-08-14', underlying_code: ES, call_volume: 100, put_volume: 150, put_call_volume_ratio: 1.5, put_call_oi_ratio: 0.8}

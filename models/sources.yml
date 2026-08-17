@@ -1,0 +1,42 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Vendor-style extracts landed locally into DuckDB. Column names, mixed
+      date formats, and duplicate snapshot rows are preserved on purpose so
+      staging can demonstrate derivatives-specific cleanup.
+    schema: raw
+    loader: python_ingest
+    freshness:
+      warn_after: {count: 2, period: day}
+      error_after: {count: 14, period: day}
+    tables:
+      - name: underlyings
+        description: One row per listed futures/options product (ES, NQ, CL, GC, ZB).
+        identifier: underlyings
+        loaded_at_field: "cast('2026-08-17 06:40:00' as timestamp)"
+        columns:
+          - name: product_code
+            description: Exchange product root. May include padding or mixed case.
+      - name: futures_contracts
+        description: Contract master extract. Grain is intended to be one listed futures contract.
+        identifier: futures_contracts
+        loaded_at_field: "try_cast(last_updated as timestamp)"
+        columns:
+          - name: contract_pk
+            description: Source contract identifier, not a warehouse surrogate key.
+      - name: futures_prices
+        description: Daily settlement extract. Intended grain is contract + trade date, but duplicates exist.
+        identifier: futures_prices
+        loaded_at_field: "try_cast(load_ts as timestamp)"
+        columns:
+          - name: globex_sym
+            description: Globex-style symbol with inconsistent spacing and case.
+      - name: options_chain
+        description: End-of-day option chain snapshots for ES and CL. Duplicates exist from snapshot retries.
+        identifier: options_chain
+        loaded_at_field: "cast('2026-08-17 06:40:00' as timestamp)"
+        columns:
+          - name: rec_hash
+            description: Source record hash used for deduplication in staging.

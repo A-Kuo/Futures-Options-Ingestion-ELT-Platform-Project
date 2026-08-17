@@ -1,0 +1,171 @@
+version: 2
+
+models:
+  - name: stg_contract_month_codes
+    description: >
+      Exchange month-letter map (F=January ... Z=December). Grain is one row
+      per month code. Used to reconstruct canonical Globex-style symbols.
+    columns:
+      - name: month_code
+        description: Single-letter CME month code.
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['F', 'G', 'H', 'J', 'K', 'M', 'N', 'Q', 'U', 'V', 'X', 'Z']
+
+  - name: stg_underlyings
+    description: >
+      One row per derivatives product root after trimming and uppercasing the
+      source product code. This is the shared parent for futures and options.
+    columns:
+      - name: underlying_sk
+        data_tests: [unique, not_null]
+      - name: underlying_code
+        description: Canonical product root such as ES or CL.
+        data_tests: [unique, not_null]
+      - name: exchange_code
+        data_tests: [not_null]
+      - name: tick_size
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: contract_multiplier
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+
+  - name: stg_futures_contracts
+    description: >
+      One row per listed futures contract. Source symbols, two-digit years, and
+      mixed expiry formats are normalized into a canonical Globex symbol and a
+      typed expiry date.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [underlying_code, month_code, contract_year]
+    columns:
+      - name: futures_contract_sk
+        data_tests: [unique, not_null]
+      - name: contract_symbol
+        description: Canonical Globex symbol, for example ESZ26.
+        data_tests: [unique, not_null]
+      - name: underlying_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_underlyings')
+                field: underlying_code
+      - name: expiry_date
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: "'2026-01-01'"
+                max_value: "'2028-12-31'"
+      - name: month_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_contract_month_codes')
+                field: month_code
+
+  - name: stg_futures_prices
+    description: >
+      One row per futures contract per market date. Duplicate settlement-file
+      retries are collapsed by keeping the latest load timestamp.
+    columns:
+      - name: futures_price_sk
+        data_tests: [unique, not_null]
+      - name: market_date
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: "'2026-01-01'"
+                max_value: "'2027-12-31'"
+      - name: contract_symbol
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_futures_contracts')
+                field: contract_symbol
+      - name: settlement_price
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: volume
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+      - name: open_interest
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+
+  - name: stg_options_chain
+    description: >
+      One row per option contract per snapshot date. Call/put flags are mapped
+      to C/P, strikes and expiries are typed, and retry snapshots are deduped.
+    columns:
+      - name: options_chain_sk
+        data_tests: [unique, not_null]
+      - name: option_contract_nk
+        data_tests: [not_null]
+      - name: snapshot_date
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: "'2026-01-01'"
+                max_value: "'2027-12-31'"
+      - name: underlying_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_underlyings')
+                field: underlying_code
+      - name: expiry_date
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: "'2026-01-01'"
+                max_value: "'2027-12-31'"
+      - name: strike
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: false
+      - name: call_put_flag
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['C', 'P']
+      - name: open_interest
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true

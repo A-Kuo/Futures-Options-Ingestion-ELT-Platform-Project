@@ -1,0 +1,6 @@
+product_code,product_desc,asset_class,exch,exch_full,min_tick,tick_val,multiplier,ccy,uom,session,group_name,listed_status,src_system
+ES,E-mini S&P 500,Equity Index,CME,Chicago Mercantile Exchange,0.25,12.5,50,USD,index points,Sun-Fri 17:00-16:00 CT,Equity,Y,exchange_master
+NQ,E-mini Nasdaq-100,Equity Index,cme,Chicago Mercantile Exchange,0.25,5.0,20,USD,index points,Sun-Fri 17:00-16:00 CT,Equity,true,cme_ref
+CL,Crude Oil Futures,Energy,NYMEX,New York Mercantile Exchange,0.01,10.0,1000,USD,USD/barrel,Sun-Fri 17:00-16:00 CT,Energy,active,cme_ref
+GC,Gold Futures,Metals,COMEX,Commodity Exchange,0.1,10.0,100,USD,USD/troy oz,Sun-Fri 17:00-16:00 CT,Metals,Y,cme_ref
+ ZB ,30-Year U.S. Treasury Bond,Interest Rate,CBOT,Chicago Board of Trade,0.03125,31.25,1000,USD,points,Sun-Fri 17:00-16:00 CT,Rates,true,exchange_master

@@ -1,0 +1,64 @@
+name: futures_options_elt
+version: "1.0.0"
+config-version: 2
+
+profile: futures_options_elt
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["data/seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: target
+clean-targets:
+  - target
+  - dbt_packages
+  - logs
+
+vars:
+  as_of_date: "2026-08-14"
+  unusual_volume_multiple: 2.5
+  unusual_oi_multiple: 2.0
+  roll_watch_dte: 10
+
+models:
+  futures_options_elt:
+    +on_schema_change: "fail"
+    staging:
+      +schema: staging
+      +materialized: view
+      +tags: ["staging"]
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+      +tags: ["intermediate"]
+    marts:
+      +schema: marts
+      +materialized: table
+      +tags: ["marts"]
+      dimensions:
+        +tags: ["dimension"]
+      facts:
+        +tags: ["fact"]
+        +materialized: table
+      futures:
+        +tags: ["futures"]
+      options:
+        +tags: ["options"]
+      quality:
+        +tags: ["quality"]
+
+seeds:
+  futures_options_elt:
+    +schema: seeds
+    +quote_columns: false
+
+snapshots:
+  futures_options_elt:
+    +target_schema: snapshots
+
+tests:
+  +store_failures: true
+  +schema: test_failures

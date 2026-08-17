@@ -1,0 +1,23 @@
+select
+    options_chain_sk,
+    snapshot_date,
+    option_contract_nk,
+    underlying_code,
+    expiry_date,
+    strike,
+    call_put_flag,
+    bid_price,
+    ask_price,
+    last_price,
+    mid_price,
+    bid_ask_spread,
+    relative_spread,
+    volume,
+    open_interest,
+    implied_volatility,
+    delta,
+    underlying_futures_price,
+    moneyness,
+    moneyness_bucket,
+    days_to_expiry
+from {{ ref('int_options_chain_enriched') }}

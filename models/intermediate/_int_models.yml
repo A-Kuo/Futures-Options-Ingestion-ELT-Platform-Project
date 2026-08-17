@@ -1,0 +1,94 @@
+version: 2
+
+models:
+  - name: int_futures_contracts_enriched
+    description: >
+      Futures contract master joined to product metadata. Grain remains one
+      row per listed contract.
+    columns:
+      - name: contract_symbol
+        data_tests: [unique, not_null]
+      - name: underlying_code
+        data_tests: [not_null]
+
+  - name: int_futures_nearby_rank
+    description: >
+      Live futures observations with nearby rank. Grain is one row per
+      contract per market date, restricted to contracts that have not yet
+      expired. Rank 1 is the front month for that underlying on that date.
+    columns:
+      - name: futures_nearby_sk
+        data_tests: [unique, not_null]
+      - name: nearby_rank
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: days_to_expiry
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+
+  - name: int_futures_activity_features
+    description: >
+      Nearby-ranked futures observations plus trailing 20-session volume and
+      open-interest context used to flag unusual activity. Not a trading signal;
+      it is a reporting monitor for operations and market-structure review.
+    columns:
+      - name: futures_nearby_sk
+        data_tests: [unique, not_null]
+
+  - name: int_options_contracts
+    description: >
+      Distinct option series extracted from chain snapshots. Grain is one row
+      per option contract (underlying + expiry + strike + call/put).
+    columns:
+      - name: options_contract_sk
+        data_tests: [unique, not_null]
+      - name: option_contract_nk
+        data_tests: [unique, not_null]
+
+  - name: int_options_chain_enriched
+    description: >
+      Option chain snapshots joined to the same-day front-month futures price
+      so strike location can be reported relative to the underlying. Implied
+      volatility and delta are source-supplied fields, not model outputs.
+    columns:
+      - name: options_chain_sk
+        data_tests: [unique, not_null]
+      - name: call_put_flag
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['C', 'P']
+      - name: moneyness_bucket
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['atm', 'near_atm', 'below_spot', 'above_spot', 'unknown']
+
+unit_tests:
+  - name: nearby_rank_orders_unexpired_contracts_by_expiry
+    description: >
+      Front-month rank must follow expiry order and exclude already-expired
+      contracts on the as-of date.
+    model: int_futures_nearby_rank
+    given:
+      - input: ref('stg_futures_prices')
+        rows:
+          - {futures_price_sk: a, market_date: '2026-06-01', contract_symbol: ESM26, open_price: 1, high_price: 1, low_price: 1, settlement_price: 5800, volume: 100, open_interest: 200, source_duplicate_count: 1}
+          - {futures_price_sk: b, market_date: '2026-06-01', contract_symbol: ESU26, open_price: 1, high_price: 1, low_price: 1, settlement_price: 5810, volume: 80, open_interest: 150, source_duplicate_count: 1}
+          - {futures_price_sk: c, market_date: '2026-06-01', contract_symbol: ESH26, open_price: 1, high_price: 1, low_price: 1, settlement_price: 5790, volume: 5, open_interest: 10, source_duplicate_count: 1}
+      - input: ref('int_futures_contracts_enriched')
+        rows:
+          - {contract_symbol: ESH26, underlying_code: ES, underlying_name: E-mini S&P 500, asset_class: Equity Index, exchange_code: CME, expiry_date: '2026-03-20', month_code: H, contract_year: 2026}
+          - {contract_symbol: ESM26, underlying_code: ES, underlying_name: E-mini S&P 500, asset_class: Equity Index, exchange_code: CME, expiry_date: '2026-06-18', month_code: M, contract_year: 2026}
+          - {contract_symbol: ESU26, underlying_code: ES, underlying_name: E-mini S&P 500, asset_class: Equity Index, exchange_code: CME, expiry_date: '2026-09-18', month_code: U, contract_year: 2026}
+    expect:
+      rows:
+        - {contract_symbol: ESM26, nearby_rank: 1, days_to_expiry: 17}
+        - {contract_symbol: ESU26, nearby_rank: 2, days_to_expiry: 109}
